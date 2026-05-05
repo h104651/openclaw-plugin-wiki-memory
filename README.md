@@ -94,6 +94,16 @@ Thin adapter that delegates to the [`astor-wiki-memory`](https://github.com/h104
 - **Search index**: SQLite-backed, rebuilt on demand (`wiki_index_update`) or automatically after write.
 - **No vector DB vendor lock**: the index is local, file-based, and portable.
 
+## Acknowledgments
+
+This plugin's design was informed by several projects in the LLM-native memory space.
+No code was copied; the architecture, tool shape, and fail-open approach were independently developed.
+
+- **[QMD](https://github.com/tobi/qmd)** — Markdown collection, BM25/vector hybrid search, MCP agent workflow
+- **[Pyrite](https://github.com/markramm/pyrite)** — Markdown/YAML source of truth with SQLite index, MCP/REST access patterns
+- **[sage-wiki](https://github.com/xoai/sage-wiki)** — chunk-level indexing, wiki Q&A, hybrid search
+- **[LanceDB](https://github.com/lancedb/lancedb)** — API design inspiration for scope isolation and recall/writeback
+
 ## License
 
 MIT
