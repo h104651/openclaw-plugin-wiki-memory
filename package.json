@@ -1,0 +1,8 @@
+{
+  "name": "openclaw-plugin-wiki-memory",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "description": "OpenClaw memory plugin: thin adapter for the LLM Wiki hybrid semantic index"
+}

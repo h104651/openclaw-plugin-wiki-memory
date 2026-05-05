@@ -1,0 +1,75 @@
+{
+  "id": "astor-wiki-memory",
+  "name": "LLM Wiki Memory",
+  "description": "Thin OpenClaw memory adapter backed by the shared LLM Wiki hybrid semantic index.",
+  "version": "0.1.0",
+  "kind": "memory",
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "memory_recall",
+      "memory_store",
+      "memory_update",
+      "memory_forget",
+      "memory_stats",
+      "wiki_recall",
+      "wiki_get",
+      "wiki_crystallize",
+      "wiki_index_update",
+      "wiki_stats"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cliPath": {
+        "type": "string",
+        "description": "Path to astor-wiki-memory CLI wrapper."
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 500,
+        "maximum": 30000,
+        "description": "Per CLI call timeout."
+      },
+      "recallLimit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10
+      },
+      "recallMaxTokens": {
+        "type": "integer",
+        "minimum": 200,
+        "maximum": 4000
+      },
+      "getMaxTokens": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 4000
+      },
+      "storeTags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "autoIndexAfterWrite": {
+        "type": "boolean",
+        "description": "Rebuild the local index after memory_store/wiki_crystallize."
+      }
+    }
+  },
+  "uiHints": {
+    "cliPath": {
+      "label": "CLI Path",
+      "help": "Full path to the astor-wiki-memory CLI binary (e.g., /usr/local/bin/astor-wiki-memory)."
+    },
+    "timeoutMs": {
+      "label": "Timeout (ms)",
+      "help": "Short timeout keeps OpenClaw fail-open if the wiki index is unavailable."
+    }
+  }
+}
