@@ -99,6 +99,15 @@ Thin adapter that delegates to the [`astor-wiki-memory`](https://github.com/h104
 This plugin's design was informed by several projects in the LLM-native memory space.
 No code was copied; the architecture, tool shape, and fail-open approach were independently developed.
 
+### Knowledge Base Schema
+
+The wiki directory structure (`wiki/entities/`, `wiki/topics/`, `wiki/sources/`, `raw/`, `index.md`, `log.md`) is inherited from:
+
+- **[Karpathy's llm-wiki](https://gist.github.com/karpathy/193a681de9e5f5c1d049e1e2c290eff9)** — the original concept of AI-maintained Markdown wiki as long-term memory
+- **[sdyckjq-lab/llm-wiki-skill](https://github.com/sdyckjq-lab/llm-wiki-skill)** (v3.3.0) — multi-platform implementation of Karpathy's methodology that shaped the file layout and workflow
+
+### Architecture & API Design
+
 - **[QMD](https://github.com/tobi/qmd)** — Markdown collection, BM25/vector hybrid search, MCP agent workflow
 - **[Pyrite](https://github.com/markramm/pyrite)** — Markdown/YAML source of truth with SQLite index, MCP/REST access patterns
 - **[sage-wiki](https://github.com/xoai/sage-wiki)** — chunk-level indexing, wiki Q&A, hybrid search
