@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astor-wiki-memory"
+version = "0.1.0"
+description = "Shared LLM Wiki memory core for OpenClaw, Hermes, and other agents"
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Astor" }]
+dependencies = []
+
+[project.scripts]
+astor-wiki-memory = "astor_wiki_memory.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

@@ -1,0 +1,19 @@
+{
+  "wiki_root": "/home/astorhsu/Documents/我們的知識庫",
+  "index_db": "/home/astorhsu/.local/share/astor-wiki-memory/index/wiki-memory.sqlite3",
+  "chunk": {
+    "max_chars": 1800,
+    "overlap_chars": 160
+  },
+  "recall": {
+    "limit": 5,
+    "max_tokens": 1200,
+    "per_item_summary_chars": 220,
+    "min_score": 0.05
+  },
+  "embedding": {
+    "backend": "hashing",
+    "dimensions": 384
+  }
+}
+
