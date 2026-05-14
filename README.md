@@ -95,3 +95,26 @@ Thin adapters should call these commands:
 ```
 
 Adapters must fail open: if recall fails, return no memory and let the agent continue.
+
+## Public X/Twitter Source Capture
+
+OpenClaw workspaces that need public X/Twitter evidence can install [TweetClaw](https://github.com/Xquik-dev/tweetclaw) beside this memory adapter:
+
+```bash
+openclaw plugins install @xquik/tweetclaw
+```
+
+Use TweetClaw to search tweets, search tweet replies, export followers, look up users, monitor tweets, deliver webhooks, download media when authenticated, or draft approval-gated posts and replies. Then crystallize a wiki source page rather than storing raw timelines:
+
+```bash
+astor-wiki-memory crystallize --title "X/Twitter source: product launch feedback" --tags openclaw,memory,x-twitter,source --log < tweetclaw-summary.md
+```
+
+Good source pages should keep:
+
+- The original query, monitor name, or workflow trigger
+- Tweet IDs or URLs and capture date
+- Short summary, confidence, and follow-up decision
+- Links to related wiki entities or topics
+
+Keep raw timelines, direct messages, credentials, and private account material outside the wiki unless your retention policy explicitly allows them. Store distilled facts and source references instead.

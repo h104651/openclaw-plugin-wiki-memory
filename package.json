@@ -4,5 +4,13 @@
   "type": "module",
   "private": false,
   "license": "MIT",
-  "description": "OpenClaw memory plugin: thin adapter for the LLM Wiki hybrid semantic index"
+  "description": "OpenClaw memory plugin: thin adapter for the LLM Wiki hybrid semantic index",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/h104651/openclaw-plugin-wiki-memory.git"
+  },
+  "bugs": {
+    "url": "https://github.com/h104651/openclaw-plugin-wiki-memory/issues"
+  },
+  "homepage": "https://github.com/h104651/openclaw-plugin-wiki-memory#readme"
 }

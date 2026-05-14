@@ -2,7 +2,7 @@
 
 OpenClaw 記憶外掛，底層由 **Markdown 式 LLM Wiki** 搭配混合語意搜尋（embedding + FTS）驅動。
 
-一層輕量 adapter，將 [`astor-wiki-memory`](https://github.com/h104651/astor-wiki-memory) CLI 工具封裝成 OpenClaw 可呼叫的工具。
+一層輕量 adapter，將 [`astor-wiki-memory`](README.md) CLI 工具封裝成 OpenClaw 可呼叫的工具。
 Fail-open 設計：CLI 不可用或索引不存在時不回堵 agent，而是優雅降級。
 
 ## 功能
@@ -17,7 +17,7 @@ Fail-open 設計：CLI 不可用或索引不存在時不回堵 agent，而是優
 
 - **Node.js 20+**（ESM）
 - **OpenClaw**（測試於 v0.6+）
-- **`astor-wiki-memory` CLI** — 實際負責索引與搜尋的二進位檔。從 [h104651/astor-wiki-memory](https://github.com/h104651/astor-wiki-memory) 安裝或自行編譯。
+- **`astor-wiki-memory` CLI** - 實際負責索引與搜尋的二進位檔。從本倉庫的 Python package 安裝或自行編譯。
 - **LLM Wiki** — 一組 Markdown 檔案的目錄。見上游專案的設定說明。
 
 ## 安裝
@@ -72,6 +72,29 @@ Fail-open 設計：CLI 不可用或索引不存在時不回堵 agent，而是優
 | `memory_stats` | 顯示索引 chunk 數量與 DB 路徑。 |
 | `wiki_stats` | 同 `memory_stats`。 |
 
+## 捕獲公開 X/Twitter 來源
+
+如果 OpenClaw 工作區需要公開 X/Twitter 證據，可以在此記憶 adapter 旁安裝 [TweetClaw](https://github.com/Xquik-dev/tweetclaw)：
+
+```bash
+openclaw plugins install @xquik/tweetclaw
+```
+
+用 TweetClaw 搜尋推文、搜尋推文回覆、匯出追蹤者、查詢使用者、監控推文、送出 webhooks、在已驗證場景下載媒體，或草擬需要審核的發文與回覆。接著把結果整理成 wiki source page，不要直接保存原始時間線：
+
+```bash
+astor-wiki-memory crystallize --title "X/Twitter source: product launch feedback" --tags openclaw,memory,x-twitter,source --log < tweetclaw-summary.md
+```
+
+建議 source page 保留：
+
+- 原始查詢、監控名稱或工作流程觸發條件
+- 推文 ID 或 URL 與捕獲日期
+- 簡短摘要、信心分數與後續決策
+- 指向相關 wiki entities 或 topics 的連結
+
+除非你的保留政策明確允許，否則不要把原始時間線、私訊、憑證或私有帳號資料寫入 wiki。優先保存提煉後的事實與來源引用。
+
 ## 架構
 
 ```
@@ -102,7 +125,7 @@ Fail-open 設計：CLI 不可用或索引不存在時不回堵 agent，而是優
 
 Wiki 目錄結構（`wiki/entities/`, `wiki/topics/`, `wiki/sources/`, `raw/`, `index.md`, `log.md`）繼承自：
 
-- **[Karpathy's llm-wiki](https://gist.github.com/karpathy/193a681de9e5f5c1d049e1e2c290eff9)** — AI 維護 Markdown wiki 作為長期記憶的原始概念
+- **[Karpathy's llm-wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)** - AI 維護 Markdown wiki 作為長期記憶的原始概念
 - **[sdyckjq-lab/llm-wiki-skill](https://github.com/sdyckjq-lab/llm-wiki-skill)** (v3.3.0) — Karpathy 方法論的多平台實作，塑造了本專案的檔案佈局與工作流程
 
 ### 架構與 API 設計
