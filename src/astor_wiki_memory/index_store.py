@@ -109,6 +109,61 @@ class WikiMemoryIndex:
             )
         return len(chunks)
 
+    def sync(self, wiki_root: Path, max_chars: int, overlap_chars: int) -> int:
+        """Only rechunk changed files; preserve all unchanged FTS and vectors."""
+        wiki_root = Path(wiki_root).expanduser().resolve()
+        new_embedding = json.dumps(
+            {"backend": self.embedding_backend, "dimensions": self.dimensions}
+        )
+        root_row = self.conn.execute(
+            "SELECT value FROM meta WHERE key='wiki_root'"
+        ).fetchone()
+        embedding_row = self.conn.execute(
+            "SELECT value FROM meta WHERE key='embedding'"
+        ).fetchone()
+        if ((root_row and root_row["value"] != str(wiki_root))
+                or (embedding_row and embedding_row["value"] != new_embedding)):
+            return self.rebuild(wiki_root, max_chars, overlap_chars)
+        current_files = discover_markdown_files(wiki_root)
+        incoming = {str(p) for p in current_files}
+        existing = {
+            row["path"]: row["mtime"]
+            for row in self.conn.execute(
+                "SELECT path, MAX(mtime) AS mtime FROM chunks GROUP BY path"
+            )
+        }
+        removed = set(existing) - incoming
+        changed = [
+            path for path in current_files
+            if str(path) not in existing or path.stat().st_mtime != existing[str(path)]
+        ]
+        with self.conn:
+            for path in sorted(removed):
+                ids = self.conn.execute(
+                    "SELECT id FROM chunks WHERE path=?", (path,)
+                ).fetchall()
+                for row in ids:
+                    self.conn.execute("DELETE FROM chunks_fts WHERE id=?", (row["id"],))
+                self.conn.execute("DELETE FROM chunks WHERE path=?", (path,))
+            for path in changed:
+                ids = self.conn.execute(
+                    "SELECT id FROM chunks WHERE path=?", (str(path),)
+                ).fetchall()
+                for row in ids:
+                    self.conn.execute("DELETE FROM chunks_fts WHERE id=?", (row["id"],))
+                self.conn.execute("DELETE FROM chunks WHERE path=?", (str(path),))
+                for chunk in chunk_markdown_file(path, wiki_root, max_chars, overlap_chars):
+                    self.upsert_chunk(chunk)
+            self.conn.execute(
+                "INSERT OR REPLACE INTO meta(key,value) VALUES('wiki_root',?)",
+                (str(wiki_root),)
+            )
+            self.conn.execute(
+                "INSERT OR REPLACE INTO meta(key,value) VALUES('embedding',?)",
+                (new_embedding,)
+            )
+        return int(self.conn.execute("SELECT COUNT(*) AS c FROM chunks").fetchone()["c"])
+
     def upsert_chunk(self, chunk: Chunk) -> None:
         embedding = self.embedder.embed("\n".join([chunk.title, chunk.heading, chunk.text]))
         self.conn.execute(

@@ -34,8 +34,10 @@ def cmd_index(args: argparse.Namespace) -> int:
                 embedding_backend=config.embedding.backend,
                 dimensions=config.embedding.dimensions,
             )
-        count = index.rebuild(
-            wiki_root=Path(args.wiki).expanduser() if args.wiki else config.wiki_root,
+        wiki_root = Path(args.wiki).expanduser() if args.wiki else config.wiki_root
+        operation = index.rebuild if args.rebuild else index.sync
+        count = operation(
+            wiki_root=wiki_root,
             max_chars=config.chunk.max_chars,
             overlap_chars=config.chunk.overlap_chars,
         )
