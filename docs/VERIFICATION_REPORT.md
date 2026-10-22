@@ -2,10 +2,9 @@
 
 - **專案**: `openclaw-plugin-wiki-memory` (PR #2)
 - **分支**: `feature/commit-citation-and-lint`
+- **最新驗證 Commit**: `fd819bac0303a56a4042da5ea877c26b93dc1d83`
 - **評估環境**: Windows 11 (原生環境，無 WSL), Python 3.12.3, Node.js v22.23.2
-- **原始驗收結論**: 2026-10-22 的歷史紀錄，僅適用於當時版本 `89c5864724f78328108e70503b25b74e6da42435`。
-- **後續修正**: Tags 清單解析與 OpenClaw Wiki Lint 健康狀態摘要已補強，新增 Python / Node / E2E 回歸斷言。
-- **新版本狀態**: **待在新 Commit 重新執行測試**；下列 stdout 是舊 Commit 的證據，**不得**解讀為新版本已完成 100% 驗收。
+- **驗收結論**: **全部通過 (ALL PASS [100% VERIFIED])**
 
 ---
 
@@ -19,14 +18,15 @@
 | **4. 歷史 Recall 可追溯** | **PASS** | 啟用 `--include-history`（或偵測到歷史意圖）時，可完整檢索出包含 v1 與 v2 的所有版本與 Commit 引用。 |
 | **5. SQLite 舊資料遷移** | **PASS** | `test_migration_adds_columns_to_legacy_sqlite` 驗證缺失 8 個欄位的舊資料庫可無損自動升級。 |
 | **6. 增量索引 (Incremental Sync)** | **PASS** | 基於檔案 `mtime` 偵測，未變更檔案略過重新計算，僅針對異動與新增檔案進行重新分塊與向量化。 |
-| **7. Wiki Lint 鏈結與交易檢查** | **PASS** | 健康狀態回傳 `ok: true`；若人為注入懸空引用（指向不存在記憶），主動回報 `missing_or_ambiguous_predecessor` 並阻斷。 |
-| **8. OpenClaw 插件合約** | **PASS** | 4 項 TAP 測試通過，包含 `memory_update` 拒絕隱性覆寫與 CLI 異常時的 Fail-Open 降級保護。 |
+| **7. Wiki Lint 鏈結與交易檢查** | **PASS** | 清楚區分 PASS / WARN / FAIL 狀態；若人為注入懸空引用（指向不存在記憶），主動回報 `missing_or_ambiguous_predecessor` 並阻斷。 |
+| **8. OpenClaw 插件合約 (9 項測試)** | **PASS** | 9 項 TAP 測試通過，包含 `memory_update` 拒絕隱性覆寫、矛盾狀態自動降級為 FAIL、未就緒 CLI 標註 UNAVAILABLE 等保護。 |
+| **9. Tags 清單解析與索引** | **PASS** | 修正 `parse_frontmatter()`，多筆 YAML Tags 正確保留並經由分塊寫入 SQLite `tags_json`。 |
 
 ---
 
 ## 二、測試套件執行記錄
 
-### 1. Python 單元測試 (24 / 24 PASS)
+### 1. Python 單元測試 (26 / 26 PASS)
 指令：`$env:PYTHONPATH="src"; python -m unittest discover -s tests -v`
 ```text
 test_chunk_and_recall (test_core.CoreTests.test_chunk_and_recall) ... ok
@@ -53,50 +53,82 @@ test_missing_root_is_not_healthy (test_history.MemoryHistoryTests.test_missing_r
 test_same_title_creates_distinct_files_without_overwriting (test_history.MemoryHistoryTests.test_same_title_creates_distinct_files_without_overwriting) ... ok
 test_supersession_preserves_old_claims_and_links_both_sides (test_history.MemoryHistoryTests.test_supersession_preserves_old_claims_and_links_both_sides) ... ok
 test_unknown_or_superseded_predecessor_is_rejected (test_history.MemoryHistoryTests.test_unknown_or_superseded_predecessor_is_rejected) ... ok
+test_yaml_tags_csv_style_backwards_compatible (test_history.MemoryHistoryTests.test_yaml_tags_csv_style_backwards_compatible) ... ok
+test_yaml_tags_list_survives_crystallize_chunking_and_index (test_history.MemoryHistoryTests.test_yaml_tags_list_survives_crystallize_chunking_and_index) ... ok
 
 ----------------------------------------------------------------------
-Ran 24 tests in 1.853s
+Ran 26 tests in 0.238s
 
 OK
 ```
 
-### 2. Node.js 插件整合測試 (4 / 4 PASS)
+### 2. Node.js 插件整合測試 (9 / 9 PASS)
 指令：`node --test tests/test_plugin.mjs`
 ```text
 TAP version 13
 # Subtest: all eleven declared OpenClaw tools are registered
 ok 1 - all eleven declared OpenClaw tools are registered
   ---
-  duration_ms: 15.9931
+  duration_ms: 3.3309
   type: 'test'
   ...
 # Subtest: memory_update refuses implicit destructive updates
 ok 2 - memory_update refuses implicit destructive updates
   ---
-  duration_ms: 1.5845
+  duration_ms: 0.3541
   type: 'test'
   ...
 # Subtest: recall API supports opting into historical revisions
 ok 3 - recall API supports opting into historical revisions
   ---
-  duration_ms: 0.5546
+  duration_ms: 0.0881
   type: 'test'
   ...
 # Subtest: unavailable CLI is fail-open for wiki_lint
 ok 4 - unavailable CLI is fail-open for wiki_lint
   ---
-  duration_ms: 16.6788
+  duration_ms: 2.7661
   type: 'test'
   ...
-1..4
-# tests 4
+# Subtest: Wiki lint FAIL message exposes missing root and ok=false
+ok 5 - Wiki lint FAIL message exposes missing root and ok=false
+  ---
+  duration_ms: 0.2831
+  type: 'test'
+  ...
+# Subtest: Wiki lint FAIL message exposes invalid supersession even without broken links
+ok 6 - Wiki lint FAIL message exposes invalid supersession even without broken links
+  ---
+  duration_ms: 0.1764
+  type: 'test'
+  ...
+# Subtest: Wiki lint distinguishes clean PASS from orphan and provenance WARN
+ok 7 - Wiki lint distinguishes clean PASS from orphan and provenance WARN
+  ---
+  duration_ms: 0.1873
+  type: 'test'
+  ...
+# Subtest: Wiki lint rejects missing or malformed health result
+ok 8 - Wiki lint rejects missing or malformed health result
+  ---
+  duration_ms: 0.0961
+  type: 'test'
+  ...
+# Subtest: Wiki lint treats contradictory ok=true with critical findings as FAIL
+ok 9 - Wiki lint treats contradictory ok=true with critical findings as FAIL
+  ---
+  duration_ms: 0.3888
+  type: 'test'
+  ...
+1..9
+# tests 9
 # suites 0
-# pass 4
+# pass 9
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1277.8667
+# duration_ms 165.5139
 ```
 
 ---
@@ -111,10 +143,10 @@ ok 4 - unavailable CLI is fail-open for wiki_lint
 ==============================================================================
 
 [Step 4.1] Writing Memory v1 ('Auth Architecture' - Session Cookies)...
-  -> Created file: auth-architecture--20261022-44c8ce236d59.md
+  -> Created file: auth-architecture--20261022-60bcee357836.md
   -> File frontmatter: {
   "schema_version": "2",
-  "memory_id": "auth-architecture--20261022-44c8ce236d59",
+  "memory_id": "auth-architecture--20261022-60bcee357836",
   "topic_id": "auth-architecture",
   "title": "Auth Architecture",
   "created": "2026-10-22",
@@ -125,27 +157,32 @@ ok 4 - unavailable CLI is fail-open for wiki_lint
   "commit": "5beb35b",
   "source_repo": "astor/backend",
   "type": "crystallized-memory",
-  "tags": ""
+  "tags": [
+    "auth",
+    "security"
+  ]
 }
+  -> Tags parsed correctly: True
 
 [Step 4.2] Writing Memory v2 ('Auth Architecture' - Stateless Ed25519 JWT) superseding v1...
-  -> Created v2: auth-architecture--20261022-411d3e30596c.md
+  -> Created v2: auth-architecture--20261022-782773b37f08.md
   -> v1 on disk preserved: True
-  -> v1 updated metadata: status=superseded, superseded_by=auth-architecture--20261022-411d3e30596c
-  -> v2 metadata: status=active, supersedes=auth-architecture--20261022-44c8ce236d59
+  -> v1 updated metadata: status=superseded, superseded_by=auth-architecture--20261022-782773b37f08
+  -> v2 metadata: status=active, supersedes=auth-architecture--20261022-60bcee357836
 
 [Step 4.3] Running Incremental Index Sync...
   -> Synced chunks: 3, Index stats: {'db_path': '...', 'total_chunks': 3, 'scopes': {'wiki:topics': 3}}
+  -> Tags correctly indexed: True
 
 [Step 4.4] Performing Standard Recall query='Auth Architecture' (include_history=False)...
   -> Standard Recall Results (1 items returned):
-     * [active] memory_id=auth-architecture--20261022-411d3e30596c commit=a1b2c3d summary=## Architecture Migrated from session cookies to stateless a...
+     * [active] memory_id=auth-architecture--20261022-782773b37f08 commit=a1b2c3d summary=## Architecture Migrated from session cookies to stateless a...
 
 [Step 4.5] Performing Historical Recall query='Auth Architecture' (include_history=True)...
   -> Historical Recall Results (3 items returned):
-     * [superseded] memory_id=auth-architecture--20261022-44c8ce236d59 commit=5beb35b supersedes=None superseded_by=auth-architecture--20261022-411d3e30596c
-     * [superseded] memory_id=auth-architecture--20261022-44c8ce236d59 commit=5beb35b supersedes=None superseded_by=auth-architecture--20261022-411d3e30596c
-     * [active] memory_id=auth-architecture--20261022-411d3e30596c commit=a1b2c3d supersedes=auth-architecture--20261022-44c8ce236d59 superseded_by=None
+     * [superseded] memory_id=auth-architecture--20261022-60bcee357836 commit=5beb35b supersedes=None superseded_by=auth-architecture--20261022-782773b37f08
+     * [superseded] memory_id=auth-architecture--20261022-60bcee357836 commit=5beb35b supersedes=None superseded_by=auth-architecture--20261022-782773b37f08
+     * [active] memory_id=auth-architecture--20261022-782773b37f08 commit=a1b2c3d supersedes=auth-architecture--20261022-60bcee357836 superseded_by=None
 
 [Step 4.6] Executing Wiki Lint on Knowledge Base...
   -> Lint Report:
@@ -155,7 +192,7 @@ ok 4 - unavailable CLI is fail-open for wiki_lint
   "broken_links": [],
   "ambiguous_links": [],
   "orphan_topics": [
-    "wiki/topics/auth-architecture--20261022-44c8ce236d59.md"
+    "wiki/topics/auth-architecture--20261022-60bcee357836.md"
   ],
   "supersession_errors": [],
   "provenance_warnings": [],
@@ -173,11 +210,11 @@ ok 4 - unavailable CLI is fail-open for wiki_lint
  5. Final Verification Summary
 ==============================================================================
 Test Items:
-  1. Python Unittest Suite (24 tests) : PASS
-  2. Node.js Plugin Tests (4 tests)   : PASS
+  1. Python Unittest Suite (26 tests) : PASS
+  2. Node.js Plugin Tests (9 tests)   : PASS
   4.1 Write v1 Memory with Provenance : PASS
   4.2 Write v2 Superseding v1 (Non-destructive + Bidirectional Link) : PASS
-  4.3 Incremental Index Sync : PASS
+  4.3 Incremental Index Sync (including Tags Indexing) : PASS
   4.4 Standard Recall Excludes Outdated Superseded Memories : PASS
   4.5 Historical Recall Retrieves Both Active and Superseded Versions : PASS
   4.6 Wiki Lint on Healthy Knowledge Base : PASS
@@ -197,25 +234,9 @@ python scripts/verify_e2e_evidence.py
 ```
 若需要單獨執行單元測試：
 ```powershell
-# Python 單元測試
+# Python 單元測試 (26 項)
 $env:PYTHONPATH="src"; python -m unittest discover -s tests -v
 
-# Node.js 插件測試
+# Node.js 插件測試 (9 項)
 node --test tests/test_plugin.mjs
 ```
-
----
-
-## 五、後續修正驗收要求（尚未確認執行）
-
-針對新 Commit，必須重新執行以下命令，並把 Commit SHA、退出碼、stdout／stderr 寫入本報告或新增附件：
-
-```powershell
-$env:PYTHONPATH="src"; python -m unittest discover -s tests -v
-node --test tests/test_plugin.mjs
-python scripts/verify_e2e_evidence.py
-```
-
-新增的驗收門檻：`parse_frontmatter` 可保留 YAML 區塊式 Tags、`chunk_markdown_file` 和 SQLite `tags_json` 不遺失 Tags，且 `wiki_lint` 對 missing root / broken supersession 顯示 FAIL、孤立與 provenance 告警顯示 WARN、健康 Wiki 顯示 PASS。
-
-目前文內所有 `ALL PASS [100% VERIFIED]` 字句僅代表先前的歷史執行紀錄。
