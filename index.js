@@ -127,7 +127,10 @@ function renderRecallPayload(payload, includeFullText, maxCharsPerItem) {
     const relPath = item.rel_path ?? item.path ?? "";
     const score = typeof item.score === "number" ? item.score.toFixed(3) : String(item.score ?? "");
     const body = includeFullText ? (item.text ?? item.summary ?? "") : (item.summary ?? "");
-    return `${index + 1}. [${id}] [score:${score}] ${title}${heading ? ` :: ${heading}` : ""}\nPath: ${relPath}\n${truncateText(String(body), maxCharsPerItem)}`;
+    const history = item.status === "superseded" ? "SUPERSEDED" : "ACTIVE/LEGACY";
+    const provenance = [item.source_repo, item.commit].filter(Boolean).join("@");
+    const citation = [`Status: ${history}`, item.observed_at && `Observed: ${item.observed_at}`, provenance && `Source: ${provenance}`, item.superseded_by && `Superseded by: ${item.superseded_by}`].filter(Boolean).join(" | ");
+    return `${index + 1}. [${id}] [score:${score}] ${title}${heading ? ` :: ${heading}` : ""}\nPath: ${relPath}\n${citation}\n${truncateText(String(body), maxCharsPerItem)}`;
   });
   return `<relevant-memories source="astor-wiki-memory" mode="${includeFullText ? "full" : "summary"}">\nFound ${results.length} wiki memories, estimated_tokens=${payload.estimated_tokens ?? "unknown"}.\n\n${rows.join("\n\n")}\n</relevant-memories>`;
 }
@@ -147,6 +150,7 @@ async function recall(config, params) {
   const maxCharsPerItem = clampInt(params.maxCharsPerItem, includeFullText ? 1200 : 220, 60, 4000);
   const args = ["recall", query, "--limit", String(limit), "--max-tokens", String(maxTokens), "--json"];
   if (typeof params.scope === "string" && params.scope.trim()) args.push("--scope", params.scope.trim());
+  if (params.includeHistory === true) args.push("--include-history");
 
   const parsed = parseJsonResult(await runCli(config, args));
   if (!parsed.ok) {
@@ -198,7 +202,7 @@ async function get(config, params) {
   }
   const value = parsed.value;
   return {
-    content: [{ type: "text", text: value.text ?? "" }],
+    content: [{ type: "text", text: `Memory ID: ${value.memory_id ?? ""}\nStatus: ${value.status ?? "legacy"}\nObserved: ${value.observed_at ?? ""}\nSource: ${[value.source_repo, value.commit].filter(Boolean).join("@")}\n\n${value.text ?? ""}` }],
     details: { ...value, source: "astor-wiki-memory" }
   };
 }
@@ -250,7 +254,12 @@ async function lint(config) {
   };
 }
 
-async function crystallize(config, params, fallbackTitle) {
+async function crystallize(config, params, fallbackTitle, updating = false) {
+  const previousId = String(params.supersedes ?? params.previous_memory_id ?? "").trim();
+  if (updating && !previousId) return {
+    content: [{ type: "text", text: "memory_update requires supersedes (existing memory ID); nothing written." }],
+    details: { error: "missing_supersedes" }
+  };
   const body = String(params.body ?? params.text ?? "").trim();
   if (!body) {
     return {
@@ -278,6 +287,11 @@ async function crystallize(config, params, fallbackTitle) {
   ].join("\n");
 
   const cliArgs = ["crystallize", "--title", title, "--tags", tags, "--log"];
+  if (previousId) cliArgs.push("--supersedes", previousId);
+  const sourceRepo = params.source_repo ?? params.sourceRepo;
+  if (typeof sourceRepo === "string" && sourceRepo.trim()) cliArgs.push("--source-repo", sourceRepo.trim());
+  const observedAt = params.observed_at ?? params.observedAt;
+  if (typeof observedAt === "string" && observedAt.trim()) cliArgs.push("--observed-at", observedAt.trim());
   if (params.commit && typeof params.commit === "string" && params.commit.trim()) {
     cliArgs.push("--commit", params.commit.trim());
   }
@@ -296,13 +310,13 @@ async function crystallize(config, params, fallbackTitle) {
 
   let indexResult;
   if (config.autoIndexAfterWrite) {
-    indexResult = parseJsonResult(await runCli(config, ["index", "--rebuild"]));
+    indexResult = parseJsonResult(await runCli(config, ["index"]));
   }
 
   return {
     content: [{
       type: "text",
-      text: `Stored in LLM Wiki: ${parsed.value.wiki_link ?? parsed.value.path}${indexResult?.ok ? `\nIndex rebuilt: ${indexResult.value.indexed_chunks ?? 0} chunks.` : ""}`
+      text: `Stored in LLM Wiki: ${parsed.value.wiki_link ?? parsed.value.path}${indexResult?.ok ? `\nIndex updated: ${indexResult.value.indexed_chunks ?? 0} chunks.` : ""}${indexResult && !indexResult.ok ? `\nWARNING: index update failed: ${indexResult.error}` : ""}`
     }],
     details: {
       action: "stored",
@@ -323,6 +337,7 @@ function recallSchema() {
       includeFullText: { type: "boolean", description: "Return chunk text when true; default summary only." },
       maxCharsPerItem: { type: "number", description: "Maximum rendered characters per result." },
       maxTokens: { type: "number", description: "Total recall token budget." },
+      includeHistory: { type: "boolean", description: "Include superseded revisions; default false except historical questions." },
       scope: { type: "string", description: "Optional wiki scope, e.g. wiki:topics or wiki:synthesis." }
     },
     required: ["query"]
@@ -350,6 +365,10 @@ const storeSchema = {
     scope: { type: "string" },
     importance: { type: "number" },
     commit: { type: "string", description: "Git commit SHA to cite for code or incident provenance." },
+    source_repo: { type: "string", description: "Git source repository owner/name." },
+    observed_at: { type: "string", description: "Claim observation date YYYY-MM-DD." },
+    supersedes: { type: "string", description: "Existing memory ID being replaced by this revision (mandatory for memory_update)." },
+    previous_memory_id: { type: "string", description: "Alias for supersedes." },
     superseded_by: { type: "string", description: "Target topic slug/title that supersedes this entry." }
   }
 };
@@ -411,9 +430,9 @@ const plugin = {
     registerTool(api, () => ({
       name: "memory_update",
       label: "Memory Update",
-      description: "Append a superseding crystallized update to the LLM Wiki. Prefer explicit title/body with the corrected state.",
+      description: "Append a new dated revision with a required supersedes memory ID. Preserve historical content and mark the old revision superseded.",
       parameters: storeSchema,
-      execute: async (_toolCallId, params) => crystallize(config, params ?? {}, "OpenClaw memory update")
+      execute: async (_toolCallId, params) => crystallize(config, params ?? {}, "OpenClaw memory update", true)
     }), { name: "memory_update" });
 
     registerTool(api, () => ({

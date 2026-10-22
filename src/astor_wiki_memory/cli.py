@@ -155,6 +155,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
     else:
         print(f"Wiki Root: {report['wiki_root']}")
         print(f"Total Markdown Files: {report['total_files']}")
+        for error in report.get("errors", []):
+            print(f"[ERROR] {error}")
+        for key in ("ambiguous_links", "supersession_errors", "provenance_warnings"):
+            for item in report.get(key, []):
+                print(f"[{key}] {item}")
         broken = report["broken_links"]
         if broken:
             print(f"\n[!] Found {len(broken)} broken wikilink(s):")
