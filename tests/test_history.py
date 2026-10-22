@@ -253,7 +253,7 @@ class MemoryHistoryTests(unittest.TestCase):
             path = write_topic(
                 root,
                 "Auth tags memory",
-                "## Scope\\n\\nJWT authentication tags must remain searchable after indexing.",
+                "## Scope\n\nJWT authentication tags must remain searchable after indexing.",
                 tags=expected,
                 recall_metadata=False,
             )
@@ -275,7 +275,7 @@ class MemoryHistoryTests(unittest.TestCase):
 
     def test_yaml_tags_csv_style_backwards_compatible(self) -> None:
         metadata, body = parse_frontmatter(
-            '---\\ntitle: Example\\ntags: alpha, beta\\nstatus: active\\n---\\n\\n# Example\\n'
+            '---\ntitle: Example\ntags: alpha, beta\nstatus: active\n---\n\n# Example\n'
         )
         self.assertEqual(metadata["tags"], "alpha, beta")
         self.assertEqual(metadata["status"], "active")
