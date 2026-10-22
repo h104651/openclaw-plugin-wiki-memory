@@ -54,6 +54,7 @@ def cmd_recall(args: argparse.Namespace) -> int:
             max_tokens=args.max_tokens or config.recall.max_tokens,
             scope=args.scope,
             min_score=args.min_score if args.min_score is not None else config.recall.min_score,
+            include_history=args.include_history,
         )
         payload = {
             "query": args.query,
@@ -87,6 +88,14 @@ def cmd_get(args: argparse.Namespace) -> int:
             approx_chars = max(200, int(max_tokens * 2.2))
             text = text[:approx_chars].rstrip() + "\n...[truncated]"
         payload = {
+            "memory_id": row["memory_id"] or Path(row["rel_path"]).stem,
+            "topic_id": row["topic_id"],
+            "status": row["status"],
+            "supersedes": row["supersedes"],
+            "superseded_by": row["superseded_by"],
+            "source_repo": row["source_repo"],
+            "commit": row["commit_sha"],
+            "observed_at": row["observed_at"],
             "id": row["id"],
             "title": row["title"],
             "heading": row["heading"],
@@ -186,6 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_recall.add_argument("--scope")
     p_recall.add_argument("--min-score", type=float)
     p_recall.add_argument("--json", action="store_true")
+    p_recall.add_argument("--include-history", action="store_true", help="Allow superseded memories in search")
     p_recall.set_defaults(func=cmd_recall)
 
     p_get = sub.add_parser("get", help="Get a chunk by id")

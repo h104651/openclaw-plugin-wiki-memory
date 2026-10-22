@@ -6,11 +6,30 @@ import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
-from .chunker import chunk_wiki
+from .chunker import chunk_wiki, chunk_markdown_file, discover_markdown_files
 from .embeddings import cosine, create_embedder
 from .models import Chunk, RecallResult
 from .query_expansion import expand_query, should_expand_recall
 from .text import estimate_tokens, tokenize
+
+
+HISTORY_COLUMNS = {
+    "memory_id": "TEXT NOT NULL DEFAULT ''",
+    "topic_id": "TEXT NOT NULL DEFAULT ''",
+    "status": "TEXT NOT NULL DEFAULT 'active'",
+    "supersedes": "TEXT",
+    "superseded_by": "TEXT",
+    "source_repo": "TEXT",
+    "commit_sha": "TEXT",
+    "observed_at": "TEXT",
+}
+
+
+def looks_historical(query: str) -> bool:
+    return bool(re.search(
+        r"曾經|以前|當時|過去|歷史|舊版|之前|原本|as of|historical|previous|old version",
+        query, re.I,
+    ))
 
 
 SCHEMA = """
@@ -29,7 +48,15 @@ CREATE TABLE IF NOT EXISTS chunks (
   updated_at TEXT,
   mtime REAL NOT NULL,
   token_est INTEGER NOT NULL,
-  embedding_json TEXT NOT NULL
+  embedding_json TEXT NOT NULL,
+  memory_id TEXT NOT NULL DEFAULT '',
+  topic_id TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  supersedes TEXT,
+  superseded_by TEXT,
+  source_repo TEXT,
+  commit_sha TEXT,
+  observed_at TEXT
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts
 USING fts5(id UNINDEXED, title, heading, summary, text);
@@ -50,6 +77,17 @@ class WikiMemoryIndex:
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate_history_columns()
+
+    def _migrate_history_columns(self) -> None:
+        existing = {row["name"] for row in self.conn.execute("PRAGMA table_info(chunks)")}
+        with self.conn:
+            for name, ddl in HISTORY_COLUMNS.items():
+                if name not in existing:
+                    self.conn.execute(f"ALTER TABLE chunks ADD COLUMN {name} {ddl}")
+            self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chunks_topic_state ON chunks(topic_id, status)"
+            )
 
     def close(self) -> None:
         self.conn.close()
@@ -77,8 +115,9 @@ class WikiMemoryIndex:
             """
             INSERT OR REPLACE INTO chunks
             (id, path, rel_path, title, heading, ordinal, text, summary, scope, tags_json,
-             updated_at, mtime, token_est, embedding_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             updated_at, mtime, token_est, embedding_json, memory_id, topic_id, status,
+             supersedes, superseded_by, source_repo, commit_sha, observed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 chunk.id,
@@ -95,6 +134,14 @@ class WikiMemoryIndex:
                 chunk.mtime,
                 chunk.token_est,
                 json.dumps(embedding),
+                chunk.memory_id,
+                chunk.topic_id,
+                chunk.status,
+                chunk.supersedes,
+                chunk.superseded_by,
+                chunk.source_repo,
+                chunk.commit,
+                chunk.observed_at,
             ),
         )
         self.conn.execute("DELETE FROM chunks_fts WHERE id = ?", (chunk.id,))
@@ -121,13 +168,16 @@ class WikiMemoryIndex:
         max_tokens: int = 1200,
         scope: str | None = None,
         min_score: float = 0.05,
+        include_history: bool = False,
     ) -> list[RecallResult]:
+        include_history = include_history or looks_historical(query)
         first_pass = self._recall_once(
             query,
             limit=limit,
             max_tokens=max_tokens,
             scope=scope,
             min_score=min_score,
+            include_history=include_history,
         )
         best_score = first_pass[0].score if first_pass else 0.0
         if not should_expand_recall(len(first_pass), best_score):
@@ -143,6 +193,7 @@ class WikiMemoryIndex:
             max_tokens=max_tokens * 2,
             scope=scope,
             min_score=min_score,
+            include_history=include_history,
         )
         return self._merge_recall_results(
             first_pass,
@@ -158,6 +209,7 @@ class WikiMemoryIndex:
         max_tokens: int,
         scope: str | None,
         min_score: float,
+        include_history: bool,
     ) -> list[RecallResult]:
         fts = self._fts_scores(query, limit=max(limit * 4, 20), scope=scope)
         vector = self._vector_scores(query, limit=max(limit * 6, 30), scope=scope)
@@ -167,11 +219,34 @@ class WikiMemoryIndex:
 
         max_fts = max(fts.values(), default=0.0) or 1.0
         rows = self._rows_by_ids(ids)
+        # A current-state question must not surface an outdated revision.
+        # If an old revision matched, proactively include its active successor,
+        # even when the successor was outside the initial top-N candidates.
+        successor_ids: set[str] = set()
+        if not include_history:
+            for row in rows:
+                if row["status"] == "superseded" or row["superseded_by"]:
+                    successors = self.conn.execute(
+                        "SELECT id FROM chunks WHERE topic_id=? AND status='active' LIMIT 12",
+                        (row["topic_id"],),
+                    ).fetchall()
+                    successor_ids.update(item["id"] for item in successors)
+            rows.extend(self._rows_by_ids(successor_ids - ids))
         ranked: list[RecallResult] = []
+        query_vector = None
         for row in rows:
+            if not include_history and (row["status"] == "superseded" or row["superseded_by"]):
+                continue
             chunk_id = row["id"]
             fts_score = fts.get(chunk_id, 0.0) / max_fts
             vector_score = vector.get(chunk_id, 0.0)
+            if chunk_id in successor_ids and chunk_id not in vector:
+                if query_vector is None:
+                    query_vector = self.embedder.embed(query)
+                try:
+                    vector_score = max(0.0, cosine(query_vector, json.loads(row["embedding_json"])))
+                except (ValueError, TypeError):
+                    vector_score = 0.0
             field_score = self._field_match_score(query, row)
             score = (0.50 * vector_score) + (0.38 * fts_score) + (0.12 * field_score)
             if score < min_score:
@@ -189,6 +264,14 @@ class WikiMemoryIndex:
                     heading=row["heading"],
                     scope=row["scope"],
                     token_est=estimate_tokens(row["summary"]),
+                    memory_id=row["memory_id"] or Path(row["rel_path"]).stem,
+                    topic_id=row["topic_id"],
+                    status=row["status"],
+                    supersedes=row["supersedes"],
+                    superseded_by=row["superseded_by"],
+                    source_repo=row["source_repo"],
+                    commit=row["commit_sha"],
+                    observed_at=row["observed_at"] or "",
                 )
             )
         ranked.sort(key=lambda r: r.score, reverse=True)
