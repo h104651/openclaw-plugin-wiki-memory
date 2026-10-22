@@ -4,6 +4,7 @@ export PYTHONPATH := $(PWD)/src:$(PYTHONPATH)
 
 test:
 	python3 -m unittest discover -s tests -v
+	node --test tests/test_plugin.mjs
 
 index:
 	python3 -m astor_wiki_memory index --rebuild

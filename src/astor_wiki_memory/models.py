@@ -20,6 +20,14 @@ class Chunk:
     updated_at: str
     mtime: float
     token_est: int
+    memory_id: str = ""
+    topic_id: str = ""
+    status: str = "active"
+    supersedes: str | None = None
+    superseded_by: str | None = None
+    source_repo: str | None = None
+    commit: str | None = None
+    observed_at: str = ""
 
     def to_json(self) -> dict[str, Any]:
         data = asdict(self)
@@ -40,6 +48,14 @@ class RecallResult:
     heading: str
     scope: str
     token_est: int
+    memory_id: str = ""
+    topic_id: str = ""
+    status: str = "active"
+    supersedes: str | None = None
+    superseded_by: str | None = None
+    source_repo: str | None = None
+    commit: str | None = None
+    observed_at: str = ""
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
