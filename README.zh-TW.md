@@ -102,3 +102,14 @@ Fail-open 設計：CLI 不可用或索引不存在時不回堵 agent，而是優
 ## 致謝
 
 此 plugin 的設計參考了 LLM 原生記憶領域的多個專案。未複製任何程式碼；架構、工具形狀與容錯降級方式皆為獨立開發。
+
+
+## v0.2 歷史記憶機制
+
+本版加入不覆寫的記憶版本、來源 repo/commit、有效與歷史召回、Wiki Lint，以及 SQLite 增量同步。
+
+- 每次寫入會回傳獨立 memory_id，不會直接覆寫同標題文件。
+- 更新既有記憶時使用 memory_update 並指定 supersedes（舊 memory_id）。
+- 一般搜尋優先排除已取代記憶；歷史查詢可帶 includeHistory。
+- Commit 僅檢查格式，尚未連到 GitHub 驗證目標 Commit 是否真的存在。
+- 升級、復原、限制與測試請見 docs/memory-versioning.md。

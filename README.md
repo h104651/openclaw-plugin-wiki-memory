@@ -96,3 +96,14 @@ astor-wiki-memory stats
 ```
 
 Adapters must fail open: if recall fails, return no memory and let the agent continue.
+
+
+## Historical Memory (v0.2)
+
+This branch adds non-destructive memory revisions, source repository + commit provenance, active/historical recall, deterministic Wiki lint, and incremental SQLite synchronization.
+
+- Each write returns a unique memory ID; no silent title-based overwrite.
+- To update a memory, use --supersedes <memory-id>, not --superseded-by.
+- Recall excludes superseded claims by default; use --include-history or a historical query for older versions.
+- Code provenance is descriptive unless the source repository and commit have been externally verified.
+- See docs/memory-versioning.md for upgrade, rollback, and failure recovery instructions.
