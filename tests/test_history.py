@@ -9,7 +9,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from astor_wiki_memory.chunker import parse_frontmatter
+from astor_wiki_memory.chunker import parse_frontmatter, chunk_markdown_file, _tags_from
 from astor_wiki_memory.cli import main
 from astor_wiki_memory.crystallize import write_topic
 from astor_wiki_memory.index_store import WikiMemoryIndex
@@ -245,6 +245,42 @@ class MemoryHistoryTests(unittest.TestCase):
             report = lint_wiki(root)
             self.assertTrue(report["ok"], report)
             self.assertEqual(len(report["active_topic_conflicts"]), 1)
+
+    def test_yaml_tags_list_survives_crystallize_chunking_and_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            expected = ["auth", "security", "中文 標籤", "tag:with-colon"]
+            path = write_topic(
+                root,
+                "Auth tags memory",
+                "## Scope\\n\\nJWT authentication tags must remain searchable after indexing.",
+                tags=expected,
+                recall_metadata=False,
+            )
+            metadata, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["tags"], expected)
+            chunks = chunk_markdown_file(path, root, max_chars=1800, overlap_chars=160)
+            self.assertTrue(chunks)
+            self.assertEqual(chunks[0].tags, expected)
+            index = WikiMemoryIndex(root / "tags.sqlite")
+            try:
+                index.rebuild(root, max_chars=1800, overlap_chars=160)
+                row = index.conn.execute(
+                    "SELECT tags_json FROM chunks WHERE memory_id=? LIMIT 1", (path.stem,)
+                ).fetchone()
+                self.assertIsNotNone(row)
+                self.assertEqual(json.loads(row["tags_json"]), expected)
+            finally:
+                index.close()
+
+    def test_yaml_tags_csv_style_backwards_compatible(self) -> None:
+        metadata, body = parse_frontmatter(
+            '---\\ntitle: Example\\ntags: alpha, beta\\nstatus: active\\n---\\n\\n# Example\\n'
+        )
+        self.assertEqual(metadata["tags"], "alpha, beta")
+        self.assertEqual(metadata["status"], "active")
+        self.assertEqual(_tags_from(metadata), ["alpha", "beta"])
+        self.assertIn("# Example", body)
 
 
 if __name__ == "__main__":

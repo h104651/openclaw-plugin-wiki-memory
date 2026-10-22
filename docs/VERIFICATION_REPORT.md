@@ -3,7 +3,9 @@
 - **專案**: `openclaw-plugin-wiki-memory` (PR #2)
 - **分支**: `feature/commit-citation-and-lint`
 - **評估環境**: Windows 11 (原生環境，無 WSL), Python 3.12.3, Node.js v22.23.2
-- **驗收結論**: **全部通過 (ALL PASS [100% VERIFIED])**
+- **原始驗收結論**: 2026-10-22 的歷史紀錄，僅適用於當時版本 `89c5864724f78328108e70503b25b74e6da42435`。
+- **後續修正**: Tags 清單解析與 OpenClaw Wiki Lint 健康狀態摘要已補強，新增 Python / Node / E2E 回歸斷言。
+- **新版本狀態**: **待在新 Commit 重新執行測試**；下列 stdout 是舊 Commit 的證據，**不得**解讀為新版本已完成 100% 驗收。
 
 ---
 
@@ -201,3 +203,19 @@ $env:PYTHONPATH="src"; python -m unittest discover -s tests -v
 # Node.js 插件測試
 node --test tests/test_plugin.mjs
 ```
+
+---
+
+## 五、後續修正驗收要求（尚未確認執行）
+
+針對新 Commit，必須重新執行以下命令，並把 Commit SHA、退出碼、stdout／stderr 寫入本報告或新增附件：
+
+```powershell
+$env:PYTHONPATH="src"; python -m unittest discover -s tests -v
+node --test tests/test_plugin.mjs
+python scripts/verify_e2e_evidence.py
+```
+
+新增的驗收門檻：`parse_frontmatter` 可保留 YAML 區塊式 Tags、`chunk_markdown_file` 和 SQLite `tags_json` 不遺失 Tags，且 `wiki_lint` 對 missing root / broken supersession 顯示 FAIL、孤立與 provenance 告警顯示 WARN、健康 Wiki 顯示 PASS。
+
+目前文內所有 `ALL PASS [100% VERIFIED]` 字句僅代表先前的歷史執行紀錄。

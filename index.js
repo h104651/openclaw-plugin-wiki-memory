@@ -235,6 +235,51 @@ async function indexUpdate(config) {
   };
 }
 
+function lintSeverity(report) {
+  if (!report || typeof report !== "object" || report.ok !== true) return "FAIL";
+  const warningFields = ["orphan_topics", "provenance_warnings", "active_topic_conflicts"];
+  return warningFields.some((key) => Array.isArray(report[key]) && report[key].length > 0) ? "WARN" : "PASS";
+}
+
+export function formatLintSummary(report) {
+  const data = report && typeof report === "object" ? report : {};
+  const groups = [
+    ["broken_links", "Broken links"],
+    ["ambiguous_links", "Ambiguous links"],
+    ["supersession_errors", "Supersession errors"],
+    ["errors", "System errors"],
+    ["orphan_topics", "Orphan topics"],
+    ["provenance_warnings", "Provenance warnings"],
+    ["active_topic_conflicts", "Active topic conflicts"]
+  ];
+  const count = (key) => Array.isArray(data[key]) ? data[key].length : 0;
+  const severity = lintSeverity(report);
+  const metrics = groups.map(([key, label]) => `${label}: ${count(key)}`).join("; ");
+  const reason = (key, entry) => {
+    if (typeof entry === "string") return entry;
+    if (!entry || typeof entry !== "object") return String(entry);
+    if (key === "broken_links") return `${entry.source_file ?? "?"} -> [[${entry.target_link ?? "?"}]]`;
+    if (key === "ambiguous_links") return `${entry.source_file ?? "?"} -> [[${entry.target_link ?? "?"}]]`;
+    if (key === "supersession_errors") return `${entry.file ?? "?"}: ${entry.reason ?? "invalid chain"}${entry.target ? ` (${entry.target})` : ""}`;
+    if (key === "provenance_warnings") return `${entry.file ?? "?"}: ${entry.reason ?? "missing provenance"}`;
+    if (key === "active_topic_conflicts") return `${entry.topic_id ?? "?"}: ${Array.isArray(entry.files) ? entry.files.join(", ") : "multiple active revisions"}`;
+    return entry.file ?? entry.reason ?? JSON.stringify(entry);
+  };
+  const order = ["errors", "broken_links", "ambiguous_links", "supersession_errors", "orphan_topics", "provenance_warnings", "active_topic_conflicts"];
+  const findings = [];
+  for (const key of order) {
+    const entries = Array.isArray(data[key]) ? data[key] : [];
+    for (const entry of entries) {
+      if (findings.length >= 5) break;
+      findings.push(`- ${key}: ${truncateText(String(reason(key, entry)), 240)}`);
+    }
+    if (findings.length >= 5) break;
+  }
+  const total = Number.isInteger(data.total_files) ? data.total_files : "unknown";
+  const summary = `LLM Wiki Lint: ${severity} (ok=${data.ok === true}). Files: ${total}. ${metrics}.`;
+  return findings.length > 0 ? `${summary}\nReasons (first ${findings.length}):\n${findings.join("\n")}` : summary;
+}
+
 async function lint(config) {
   const parsed = parseJsonResult(await runCli(config, ["lint", "--json"]));
   if (!parsed.ok) {
@@ -243,14 +288,13 @@ async function lint(config) {
       details: { error: "lint_unavailable", message: parsed.error }
     };
   }
-  const brokenCount = Array.isArray(parsed.value.broken_links) ? parsed.value.broken_links.length : 0;
-  const orphanCount = Array.isArray(parsed.value.orphan_topics) ? parsed.value.orphan_topics.length : 0;
   return {
-    content: [{
-      type: "text",
-      text: `LLM Wiki Lint: ${parsed.value.total_files ?? 0} files. Broken links: ${brokenCount}, Unlinked topics: ${orphanCount}.`
-    }],
-    details: { ...parsed.value, source: "astor-wiki-memory" }
+    content: [{ type: "text", text: formatLintSummary(parsed.value) }],
+    details: {
+      ...parsed.value,
+      severity: lintSeverity(parsed.value),
+      source: "astor-wiki-memory"
+    }
   };
 }
 

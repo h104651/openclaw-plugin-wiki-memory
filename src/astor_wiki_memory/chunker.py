@@ -25,7 +25,13 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str | list[str]], str]:
         if not line.strip():
             continue
         if line.startswith("  - ") and current_key:
-            existing = meta.setdefault(current_key, [])
+            # "tags:" was parsed as an empty scalar. When indented list
+            # items follow, promote it to a list instead of silently
+            # discarding every entry (existing setdefault() kept "").
+            existing = meta.get(current_key)
+            if existing is None or existing == "":
+                existing = []
+                meta[current_key] = existing
             if isinstance(existing, list):
                 entry = line[4:].strip()
                 if entry.startswith('"') and entry.endswith('"'):

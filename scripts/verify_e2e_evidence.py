@@ -30,7 +30,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from astor_wiki_memory.chunker import parse_frontmatter
+from astor_wiki_memory.chunker import parse_frontmatter, chunk_markdown_file
 from astor_wiki_memory.crystallize import write_topic
 from astor_wiki_memory.index_store import WikiMemoryIndex
 from astor_wiki_memory.lint import lint_wiki
@@ -130,6 +130,8 @@ def main() -> int:
             and v1_meta.get("commit") == "5beb35b"
             and v1_meta.get("source_repo") == "astor/backend"
             and v1_meta.get("memory_id") == p1.stem
+            and v1_meta.get("tags") == ["auth", "security"]
+            and all(chunk.tags == ["auth", "security"] for chunk in chunk_markdown_file(p1, wiki_root, 1800, 160))
         )
         e2e_results.append((
             "4.1 Write v1 Memory with Provenance",
@@ -138,6 +140,7 @@ def main() -> int:
         ))
         print(f"  -> Created file: {p1.name}")
         print(f"  -> File frontmatter: {json.dumps(v1_meta, indent=2, ensure_ascii=False)}")
+        print(f"  -> Tags parsed correctly: {v1_meta.get('tags') == ['auth', 'security']}")
 
         # Step 4.2: Write v2 memory replacing v1
         print("\n[Step 4.2] Writing Memory v2 ('Auth Architecture' - Stateless Ed25519 JWT) superseding v1...")
@@ -187,13 +190,22 @@ def main() -> int:
             chunks_synced = index.sync(wiki_root, max_chars=1800, overlap_chars=160)
             stats = index.stats()
             total_chunks = stats["total_chunks"]
-            step3_ok = (chunks_synced >= 2 and total_chunks >= 2)
+            index_tag_rows = index.conn.execute(
+                "SELECT DISTINCT tags_json FROM chunks WHERE memory_id IN (?, ?)",
+                (p1.stem, p2.stem),
+            ).fetchall()
+            tags_in_index = bool(index_tag_rows) and all(
+                json.loads(row["tags_json"]) == ["auth", "security"]
+                for row in index_tag_rows
+            )
+            step3_ok = (chunks_synced >= 2 and total_chunks >= 2 and tags_in_index)
             e2e_results.append((
                 "4.3 Incremental Index Sync",
                 step3_ok,
                 f"Chunks synced: {chunks_synced}, Total indexed chunks: {total_chunks}",
             ))
             print(f"  -> Synced chunks: {chunks_synced}, Index stats: {stats}")
+            print(f"  -> Tags correctly indexed: {tags_in_index}")
 
             # Step 4.4: Standard Recall (History suppression check)
             print("\n[Step 4.4] Performing Standard Recall query='Auth Architecture' (include_history=False)...")
@@ -288,8 +300,8 @@ def main() -> int:
     all_pass = py_pass and node_pass and all(r[1] for r in e2e_results)
     print(f"Commit Evaluated : {commit_sha}\n")
     print("Test Items:")
-    print(f"  1. Python Unittest Suite (24 tests) : {'PASS' if py_pass else 'FAIL'}")
-    print(f"  2. Node.js Plugin Tests (4 tests)   : {'PASS' if node_pass else 'FAIL'}")
+    print(f"  1. Python Unittest Suite : {'PASS' if py_pass else 'FAIL'}")
+    print(f"  2. Node.js Plugin Tests   : {'PASS' if node_pass else 'FAIL'}")
     for name, status, detail in e2e_results:
         print(f"  {name} : {'PASS' if status else 'FAIL'} ({detail})")
 
