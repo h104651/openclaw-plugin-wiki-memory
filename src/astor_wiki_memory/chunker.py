@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -26,12 +27,23 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str | list[str]], str]:
         if line.startswith("  - ") and current_key:
             existing = meta.setdefault(current_key, [])
             if isinstance(existing, list):
-                existing.append(line[4:].strip())
+                entry = line[4:].strip()
+                if entry.startswith('"') and entry.endswith('"'):
+                    try:
+                        entry = json.loads(entry)
+                    except json.JSONDecodeError:
+                        entry = entry.strip('"')
+                existing.append(entry)
             continue
         if ":" in line:
             key, value = line.split(":", 1)
             current_key = key.strip()
-            value = value.strip().strip('"')
+            value = value.strip()
+            if value.startswith('"') and value.endswith('"'):
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError:
+                    value = value.strip('"')
             meta[current_key] = value
     return meta, text[match.end() :]
 
@@ -169,6 +181,14 @@ def chunk_markdown_file(path: Path, wiki_root: Path, max_chars: int, overlap_cha
                     updated_at=updated_at,
                     mtime=stat.st_mtime,
                     token_est=estimate_tokens(piece),
+                memory_id=str(meta.get("memory_id") or path.stem),
+                topic_id=str(meta.get("topic_id") or slugify(title)),
+                status=str(meta.get("status") or "active"),
+                supersedes=str(meta["supersedes"]) if meta.get("supersedes") else None,
+                superseded_by=str(meta["superseded_by"]) if meta.get("superseded_by") else None,
+                source_repo=str(meta["source_repo"]) if meta.get("source_repo") else None,
+                commit=str(meta["commit"]) if meta.get("commit") else None,
+                observed_at=str(meta.get("observed_at") or updated_at),
                 )
             )
             ordinal += 1

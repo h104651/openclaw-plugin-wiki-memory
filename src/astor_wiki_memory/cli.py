@@ -127,10 +127,13 @@ def cmd_crystallize(args: argparse.Namespace) -> int:
         recall_metadata=not args.no_recall_metadata,
         commit=args.commit,
         superseded_by=args.superseded_by,
+        supersedes=args.supersedes,
+        source_repo=args.source_repo,
+        observed_at=args.observed_at,
     )
     if args.log:
         append_log(wiki_root, args.title, path, commit=args.commit)
-    print(json.dumps({"path": str(path), "wiki_link": f"[[{path.stem}]]"}, ensure_ascii=False, indent=2))
+    print(json.dumps({"path": str(path), "memory_id": path.stem, "wiki_link": f"[[{path.stem}]]", "supersedes": args.supersedes}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -200,7 +203,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_crystallize.add_argument("--body-file")
     p_crystallize.add_argument("--tags", default="memory")
     p_crystallize.add_argument("--commit", help="Associated Git commit SHA (e.g. 5beb35b)")
-    p_crystallize.add_argument("--superseded-by", help="Topic title/slug that supersedes this entry")
+    p_crystallize.add_argument("--superseded-by", help="Legacy: target that already supersedes this page")
+    p_crystallize.add_argument("--supersedes", help="Existing memory ID to supersede with a new revision")
+    p_crystallize.add_argument("--source-repo", help="Source repository owner/name")
+    p_crystallize.add_argument("--observed-at", help="Date at which claim was observed, YYYY-MM-DD")
     p_crystallize.add_argument("--log", action="store_true", help="Append to log.md")
     p_crystallize.add_argument(
         "--no-recall-metadata",

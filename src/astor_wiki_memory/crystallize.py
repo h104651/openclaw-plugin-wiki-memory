@@ -5,7 +5,8 @@ from pathlib import Path
 import re
 
 from .query_expansion import expand_query
-from .text import normalize_text, slugify
+from .text import normalize_text
+from .versioning import write_versioned_topic
 
 
 def _has_section(body: str, heading: str) -> bool:
@@ -95,46 +96,18 @@ def write_topic(
     recall_metadata: bool = True,
     commit: str | None = None,
     superseded_by: str | None = None,
+    supersedes: str | None = None,
+    source_repo: str | None = None,
+    observed_at: str | None = None,
 ) -> Path:
-    tags = tags or []
-    today = date.today().isoformat()
-    slug = slugify(title)
-    path = wiki_root / topic_dir / f"{slug}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    tag_lines = "\n".join(f"  - {tag}" for tag in tags)
-    extra_meta = ""
-    if commit:
-        extra_meta += f"commit: {commit}\n"
-    if superseded_by:
-        extra_meta += f"superseded_by: {superseded_by}\n"
-
-    frontmatter = (
-        "---\n"
-        f"title: {title}\n"
-        f"created: {today}\n"
-        f"updated: {today}\n"
-        f"{extra_meta}"
-        "type: crystallized-memory\n"
-        "tags:\n"
-        f"{tag_lines if tag_lines else '  - memory'}\n"
-        "---\n\n"
-    )
-
     content = _ensure_recall_metadata(title, body) if recall_metadata else body.strip()
     if not content.startswith("#"):
         content = f"# {title}\n\n{content}"
-
-    if superseded_by:
-        banner = f"> ⚠️ **此頁面已被 [[{superseded_by}]] 取代 (Superseded)。請參閱新頁面獲取最新現況。**\n\n"
-        lines = content.splitlines(keepends=True)
-        if lines and lines[0].startswith("# "):
-            content = lines[0] + "\n" + banner + "".join(lines[1:])
-        else:
-            content = banner + content
-
-    path.write_text(frontmatter + content + "\n", encoding="utf-8")
-    return path
+    return write_versioned_topic(
+        wiki_root, title, content, tags or ["memory"], topic_dir=topic_dir,
+        commit=commit, source_repo=source_repo, observed_at=observed_at,
+        supersedes=supersedes, superseded_by=superseded_by,
+    )
 
 
 def append_log(wiki_root: Path, title: str, page_path: Path, commit: str | None = None) -> None:
