@@ -31,7 +31,8 @@ This repo intentionally keeps the core independent from OpenClaw internals. If O
 - Search using FTS5 + local vector similarity.
 - Return compact recall summaries with a hard token budget.
 - Read details on demand with `get`.
-- Write crystallized lessons back to the Wiki.
+- Write crystallized lessons back to the Wiki with Git commit provenance (`--commit`) and supersession tracking (`--superseded-by`).
+- Lint the Wiki for broken `[[wikilinks]]` and orphan topic files (`astor-wiki-memory lint`).
 - Redact credential-like lines before they enter the recall index.
 
 The default vector backend is local hashing, so it does not depend on Gemini/OpenAI quota. A true embedding backend can be added behind the same interface without changing the Wiki source.
@@ -51,24 +52,23 @@ Rebuildable index:
 
 ## Quick Start
 
-Preferred command on this WSL machine:
+Preferred command on this machine:
 
 ```bash
-/home/astorhsu/.local/bin/astor-wiki-memory index --rebuild
-/home/astorhsu/.local/bin/astor-wiki-memory recall "OpenClaw LanceDB Pro replacement strategy" --limit 5
-/home/astorhsu/.local/bin/astor-wiki-memory stats
+astor-wiki-memory index --rebuild
+astor-wiki-memory recall "OpenClaw LanceDB Pro replacement strategy" --limit 5
+astor-wiki-memory lint
+astor-wiki-memory stats
 ```
 
 Development mode:
 
 ```bash
-cd /home/astorhsu/repos/astor-wiki-memory
 PYTHONPATH=src python3 -m astor_wiki_memory index --rebuild
 PYTHONPATH=src python3 -m astor_wiki_memory recall "OpenClaw LanceDB Pro replacement strategy" --limit 5
+PYTHONPATH=src python3 -m astor_wiki_memory lint
 PYTHONPATH=src python3 -m astor_wiki_memory stats
 ```
-
-If `/home/astorhsu/.local/bin` is added to `PATH`, the shorter `astor-wiki-memory` command is equivalent.
 
 ## Token Budget Contract
 
@@ -87,11 +87,12 @@ Default policy:
 Thin adapters should call these commands:
 
 ```bash
-/home/astorhsu/.local/bin/astor-wiki-memory recall "<query>" --json --limit 5 --max-tokens 1200
-/home/astorhsu/.local/bin/astor-wiki-memory get "<chunk_id>" --json --max-tokens 800
-/home/astorhsu/.local/bin/astor-wiki-memory crystallize --title "<title>" --tags openclaw,memory --log < body.md
-/home/astorhsu/.local/bin/astor-wiki-memory index
-/home/astorhsu/.local/bin/astor-wiki-memory stats
+astor-wiki-memory recall "<query>" --json --limit 5 --max-tokens 1200
+astor-wiki-memory get "<chunk_id>" --json --max-tokens 800
+astor-wiki-memory crystallize --title "<title>" --tags openclaw,memory --commit "<sha>" --log < body.md
+astor-wiki-memory lint --json
+astor-wiki-memory index
+astor-wiki-memory stats
 ```
 
 Adapters must fail open: if recall fails, return no memory and let the agent continue.

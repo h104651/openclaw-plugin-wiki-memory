@@ -3,8 +3,9 @@ import tempfile
 import unittest
 
 from astor_wiki_memory.chunker import chunk_wiki
-from astor_wiki_memory.crystallize import write_topic
+from astor_wiki_memory.crystallize import append_log, write_topic
 from astor_wiki_memory.index_store import WikiMemoryIndex
+from astor_wiki_memory.lint import lint_wiki
 from astor_wiki_memory.query_expansion import expand_query
 
 
@@ -157,6 +158,57 @@ This archive mentions MiniMax CN Provider Fix 401 Endpoint Root Cause once, but 
                 self.assertEqual(results[0].title, "MiniMax CN Provider Fix")
             finally:
                 index.close()
+
+    def test_crystallize_supports_commit_and_superseded_by(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = write_topic(
+                root,
+                "WebRTC Playout Delay Tuning",
+                "壓制 JitterBuffer 至 0~30ms。",
+                commit="5beb35b",
+                superseded_by="webrtc-zero-latency-v2",
+            )
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("commit: 5beb35b", text)
+            self.assertIn("superseded_by: webrtc-zero-latency-v2", text)
+            self.assertIn("此頁面已被 [[webrtc-zero-latency-v2]] 取代", text)
+
+            append_log(root, "WebRTC Playout Delay Tuning", path, commit="5beb35b")
+            log_text = (root / "log.md").read_text(encoding="utf-8")
+            self.assertIn("commit: `5beb35b`", log_text)
+
+    def test_lint_wiki_detects_broken_links_and_orphans(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            topics = root / "wiki" / "topics"
+            topics.mkdir(parents=True)
+
+            # Page A links to existing Page B and missing Page C
+            (topics / "page-a.md").write_text(
+                "# Page A\n\nLink to [[page-b]] and missing [[missing-page]].\n",
+                encoding="utf-8",
+            )
+            (topics / "page-b.md").write_text(
+                "# Page B\n\nTarget content.\n",
+                encoding="utf-8",
+            )
+            # Orphan page never linked anywhere
+            (topics / "orphan-page.md").write_text(
+                "# Orphan Page\n\nNobody links here.\n",
+                encoding="utf-8",
+            )
+
+            report = lint_wiki(root)
+            self.assertFalse(report["ok"])
+            broken = report["broken_links"]
+            self.assertEqual(len(broken), 1)
+            self.assertEqual(broken[0]["target_link"], "missing-page")
+
+            orphans = report["orphan_topics"]
+            self.assertIn("wiki/topics/orphan-page.md", orphans)
+            # page-b is linked by page-a, so it shouldn't be an orphan
+            self.assertNotIn("wiki/topics/page-b.md", orphans)
 
 
 if __name__ == "__main__":

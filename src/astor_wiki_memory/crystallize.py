@@ -93,6 +93,8 @@ def write_topic(
     tags: list[str] | None = None,
     topic_dir: str = "wiki/topics",
     recall_metadata: bool = True,
+    commit: str | None = None,
+    superseded_by: str | None = None,
 ) -> Path:
     tags = tags or []
     today = date.today().isoformat()
@@ -101,11 +103,18 @@ def write_topic(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     tag_lines = "\n".join(f"  - {tag}" for tag in tags)
+    extra_meta = ""
+    if commit:
+        extra_meta += f"commit: {commit}\n"
+    if superseded_by:
+        extra_meta += f"superseded_by: {superseded_by}\n"
+
     frontmatter = (
         "---\n"
         f"title: {title}\n"
         f"created: {today}\n"
         f"updated: {today}\n"
+        f"{extra_meta}"
         "type: crystallized-memory\n"
         "tags:\n"
         f"{tag_lines if tag_lines else '  - memory'}\n"
@@ -116,18 +125,26 @@ def write_topic(
     if not content.startswith("#"):
         content = f"# {title}\n\n{content}"
 
+    if superseded_by:
+        banner = f"> ⚠️ **此頁面已被 [[{superseded_by}]] 取代 (Superseded)。請參閱新頁面獲取最新現況。**\n\n"
+        lines = content.splitlines(keepends=True)
+        if lines and lines[0].startswith("# "):
+            content = lines[0] + "\n" + banner + "".join(lines[1:])
+        else:
+            content = banner + content
+
     path.write_text(frontmatter + content + "\n", encoding="utf-8")
     return path
 
 
-def append_log(wiki_root: Path, title: str, page_path: Path) -> None:
+def append_log(wiki_root: Path, title: str, page_path: Path, commit: str | None = None) -> None:
     log_path = wiki_root / "log.md"
     today = date.today().isoformat()
     link = page_path.stem
+    commit_suffix = f" (commit: `{commit}`)" if commit else ""
     entry = (
         f"\n## {today} crystallize | {title}\n\n"
-        f"新增頁面：[[{link}]]\n"
+        f"新增頁面：[[{link}]]{commit_suffix}\n"
     )
     with log_path.open("a", encoding="utf-8") as f:
         f.write(entry)
-

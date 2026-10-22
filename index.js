@@ -231,6 +231,25 @@ async function indexUpdate(config) {
   };
 }
 
+async function lint(config) {
+  const parsed = parseJsonResult(await runCli(config, ["lint", "--json"]));
+  if (!parsed.ok) {
+    return {
+      content: [{ type: "text", text: failOpenText("lint", parsed) }],
+      details: { error: "lint_unavailable", message: parsed.error }
+    };
+  }
+  const brokenCount = Array.isArray(parsed.value.broken_links) ? parsed.value.broken_links.length : 0;
+  const orphanCount = Array.isArray(parsed.value.orphan_topics) ? parsed.value.orphan_topics.length : 0;
+  return {
+    content: [{
+      type: "text",
+      text: `LLM Wiki Lint: ${parsed.value.total_files ?? 0} files. Broken links: ${brokenCount}, Unlinked topics: ${orphanCount}.`
+    }],
+    details: { ...parsed.value, source: "astor-wiki-memory" }
+  };
+}
+
 async function crystallize(config, params, fallbackTitle) {
   const body = String(params.body ?? params.text ?? "").trim();
   if (!body) {
@@ -258,7 +277,16 @@ async function crystallize(config, params, fallbackTitle) {
     body
   ].join("\n");
 
-  const parsed = parseJsonResult(await runCliWithInput(config, ["crystallize", "--title", title, "--tags", tags, "--log"], content));
+  const cliArgs = ["crystallize", "--title", title, "--tags", tags, "--log"];
+  if (params.commit && typeof params.commit === "string" && params.commit.trim()) {
+    cliArgs.push("--commit", params.commit.trim());
+  }
+  const superseded = params.superseded_by || params.supersededBy;
+  if (superseded && typeof superseded === "string" && superseded.trim()) {
+    cliArgs.push("--superseded-by", superseded.trim());
+  }
+
+  const parsed = parseJsonResult(await runCliWithInput(config, cliArgs, content));
   if (!parsed.ok) {
     return {
       content: [{ type: "text", text: failOpenText("store", parsed) }],
@@ -320,7 +348,9 @@ const storeSchema = {
     title: { type: "string" },
     category: { type: "string" },
     scope: { type: "string" },
-    importance: { type: "number" }
+    importance: { type: "number" },
+    commit: { type: "string", description: "Git commit SHA to cite for code or incident provenance." },
+    superseded_by: { type: "string", description: "Target topic slug/title that supersedes this entry." }
   }
 };
 
@@ -411,6 +441,14 @@ const plugin = {
       parameters: emptySchema,
       execute: async () => indexUpdate(config)
     }), { name: "wiki_index_update" });
+
+    registerTool(api, () => ({
+      name: "wiki_lint",
+      label: "Wiki Lint",
+      description: "Scan the LLM Wiki Markdown files for broken links and orphan topics.",
+      parameters: emptySchema,
+      execute: async () => lint(config)
+    }), { name: "wiki_lint" });
 
     registerTool(api, () => ({
       name: "memory_stats",

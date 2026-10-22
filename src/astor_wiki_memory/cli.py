@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import load_config
 from .crystallize import append_log, write_topic
 from .index_store import WikiMemoryIndex
+from .lint import lint_wiki
 from .text import estimate_tokens
 
 
@@ -118,10 +119,48 @@ def cmd_crystallize(args: argparse.Namespace) -> int:
     else:
         body = sys.stdin.read()
     tags = [t.strip() for t in (args.tags or "").split(",") if t.strip()]
-    path = write_topic(wiki_root, args.title, body, tags=tags, recall_metadata=not args.no_recall_metadata)
+    path = write_topic(
+        wiki_root,
+        args.title,
+        body,
+        tags=tags,
+        recall_metadata=not args.no_recall_metadata,
+        commit=args.commit,
+        superseded_by=args.superseded_by,
+    )
     if args.log:
-        append_log(wiki_root, args.title, path)
+        append_log(wiki_root, args.title, path, commit=args.commit)
     print(json.dumps({"path": str(path), "wiki_link": f"[[{path.stem}]]"}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_lint(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    wiki_root = Path(args.wiki).expanduser() if args.wiki else config.wiki_root
+    report = lint_wiki(wiki_root)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(f"Wiki Root: {report['wiki_root']}")
+        print(f"Total Markdown Files: {report['total_files']}")
+        broken = report["broken_links"]
+        if broken:
+            print(f"\n[!] Found {len(broken)} broken wikilink(s):")
+            for item in broken:
+                print(f"  - {item['source_file']} -> [[{item['target_link']}]]")
+        else:
+            print("\n[OK] No broken wikilinks found.")
+
+        orphans = report["orphan_topics"]
+        if orphans:
+            print(f"\n[i] Found {len(orphans)} unlinked topic(s) (no incoming links):")
+            for orphan in orphans:
+                print(f"  - {orphan}")
+        else:
+            print("[OK] No unlinked topic files found.")
+
+    if args.fail_on_broken and not report["ok"]:
+        return 1
     return 0
 
 
@@ -160,6 +199,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_crystallize.add_argument("--title", required=True)
     p_crystallize.add_argument("--body-file")
     p_crystallize.add_argument("--tags", default="memory")
+    p_crystallize.add_argument("--commit", help="Associated Git commit SHA (e.g. 5beb35b)")
+    p_crystallize.add_argument("--superseded-by", help="Topic title/slug that supersedes this entry")
     p_crystallize.add_argument("--log", action="store_true", help="Append to log.md")
     p_crystallize.add_argument(
         "--no-recall-metadata",
@@ -167,6 +208,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not append lightweight recall alias / natural-language entry sections",
     )
     p_crystallize.set_defaults(func=cmd_crystallize)
+
+    p_lint = sub.add_parser("lint", help="Lint Wiki markdown files for broken links and orphan topics")
+    p_lint.add_argument("--wiki", help="Wiki root path")
+    p_lint.add_argument("--json", action="store_true", help="Output JSON report")
+    p_lint.add_argument("--fail-on-broken", action="store_true", help="Exit with code 1 if broken links found")
+    p_lint.set_defaults(func=cmd_lint)
 
     return parser
 
@@ -179,4 +226,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
