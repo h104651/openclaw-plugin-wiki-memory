@@ -19,7 +19,7 @@ from .text import slugify
 
 
 _SHA = re.compile(r"^[a-fA-F0-9]{7,40}$")
-_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_REPO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _MEMORY_ID = re.compile(r"^[\w.\-]+$", re.UNICODE)
 
 

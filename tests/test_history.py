@@ -134,13 +134,17 @@ class MemoryHistoryTests(unittest.TestCase):
     def test_migration_adds_columns_to_legacy_sqlite(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "legacy.sqlite"
-            with sqlite3.connect(path) as conn:
+            conn = sqlite3.connect(path)
+            try:
                 conn.execute("""CREATE TABLE chunks (
                     id TEXT PRIMARY KEY, path TEXT, rel_path TEXT, title TEXT,
                     heading TEXT, ordinal INTEGER, text TEXT, summary TEXT,
                     scope TEXT, tags_json TEXT, updated_at TEXT, mtime REAL,
                     token_est INTEGER, embedding_json TEXT
                 )""")
+                conn.commit()
+            finally:
+                conn.close()
             index = WikiMemoryIndex(path)
             try:
                 cols = {row["name"] for row in index.conn.execute("PRAGMA table_info(chunks)")}
