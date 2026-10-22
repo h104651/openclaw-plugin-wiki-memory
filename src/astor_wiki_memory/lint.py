@@ -37,7 +37,7 @@ def lint_wiki(wiki_root: Path) -> dict[str, object]:
     empty = {
         "wiki_root": str(wiki_root), "total_files": 0, "broken_links": [],
         "ambiguous_links": [], "orphan_topics": [], "supersession_errors": [],
-        "provenance_warnings": [], "errors": [], "ok": False,
+        "provenance_warnings": [], "active_topic_conflicts": [], "errors": [], "ok": False,
     }
     if not wiki_root.is_dir():
         empty["errors"].append(f"Wiki root not found or not a directory: {wiki_root}")
@@ -69,6 +69,7 @@ def lint_wiki(wiki_root: Path) -> dict[str, object]:
     incoming = defaultdict(int)
     provenance_warnings = []
     supersession_errors = []
+    active_topics = defaultdict(list)
     for source, (meta, body) in pages.items():
         rel = source.relative_to(wiki_root).as_posix()
         for match in _LINK.finditer(_visible_prose(body)):
@@ -110,7 +111,9 @@ def lint_wiki(wiki_root: Path) -> dict[str, object]:
         memory_id = str(meta.get("memory_id") or source.stem)
         next_id = str(meta.get("superseded_by") or "")
         previous_id = str(meta.get("supersedes") or "")
-        status = str(meta.get("status") or "active")
+        status = str(meta.get("status") or ("superseded" if next_id else "active"))
+        if status == "active":
+            active_topics[str(meta.get("topic_id") or source.stem)].append(rel)
         if status == "superseded" and not next_id:
             supersession_errors.append({"file": rel, "reason": "superseded_without_successor"})
         if status == "active" and next_id:
@@ -129,6 +132,13 @@ def lint_wiki(wiki_root: Path) -> dict[str, object]:
                 supersession_errors.append({"file": rel, "reason": "missing_or_ambiguous_predecessor", "target": previous_id})
             elif matches[0] == source:
                 supersession_errors.append({"file": rel, "reason": "self_supersession"})
+            else:
+                previous_meta = pages.get(matches[0], ({}, ""))[0]
+                if str(previous_meta.get("superseded_by") or "") != memory_id:
+                    supersession_errors.append({
+                        "file": rel, "reason": "predecessor_missing_reverse_link",
+                        "target": previous_id,
+                    })
         if len(by_id[memory_id]) > 1:
             supersession_errors.append({"file": rel, "reason": "duplicate_memory_id", "id": memory_id})
 
@@ -164,6 +174,10 @@ def lint_wiki(wiki_root: Path) -> dict[str, object]:
         "orphan_topics": sorted(orphans),
         "supersession_errors": supersession_errors,
         "provenance_warnings": provenance_warnings,
+        "active_topic_conflicts": [
+            {"topic_id": topic_id, "files": files}
+            for topic_id, files in active_topics.items() if len(files) > 1
+        ],
         "errors": errors,
     }
     report["ok"] = not (broken or ambiguous or supersession_errors or errors)

@@ -218,6 +218,30 @@ class MemoryHistoryTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("superseded", {item["status"] for item in history["results"]})
 
+    def test_lint_detects_crash_before_reverse_link_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = write_topic(root, "Crash check", "Original content", recall_metadata=False)
+            new = write_topic(root, "Crash check", "Revised content", supersedes=old.stem, recall_metadata=False)
+            old_file = old.read_text(encoding="utf-8")
+            old_file = old_file.replace("status: superseded", "status: active")
+            old_file = old_file.replace(f"superseded_by: {new.stem}", "")
+            old.write_text(old_file, encoding="utf-8")
+            report = lint_wiki(root)
+            self.assertFalse(report["ok"])
+            self.assertIn("predecessor_missing_reverse_link", {
+                item["reason"] for item in report["supersession_errors"]
+            })
+
+    def test_lint_warns_if_multiple_active_revisions_share_topic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_topic(root, "Repeated title", "First observation", recall_metadata=False)
+            write_topic(root, "Repeated title", "Second independent observation", recall_metadata=False)
+            report = lint_wiki(root)
+            self.assertTrue(report["ok"], report)
+            self.assertEqual(len(report["active_topic_conflicts"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
