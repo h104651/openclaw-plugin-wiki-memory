@@ -90,3 +90,13 @@ test("Wiki lint rejects missing or malformed health result", () => {
   assert.match(formatLintSummary({ total_files: 0 }), /Lint: FAIL/);
   assert.match(formatLintSummary(null), /Lint: FAIL/);
 });
+
+test("Wiki lint treats contradictory ok=true with critical findings as FAIL", () => {
+  const text = formatLintSummary({
+    ok: true, total_files: 5,
+    errors: [], broken_links: [{ source_file: "wiki/a.md", target_link: "missing" }]
+  });
+  assert.match(text, /Lint: FAIL/);
+  assert.match(text, /Broken links: 1/);
+  assert.match(text, /wiki\/a.md -> \[\[missing\]\]/);
+});

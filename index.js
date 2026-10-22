@@ -237,6 +237,8 @@ async function indexUpdate(config) {
 
 function lintSeverity(report) {
   if (!report || typeof report !== "object" || report.ok !== true) return "FAIL";
+  const failureFields = ["broken_links", "ambiguous_links", "supersession_errors", "errors"];
+  if (failureFields.some((key) => Array.isArray(report[key]) && report[key].length > 0)) return "FAIL";
   const warningFields = ["orphan_topics", "provenance_warnings", "active_topic_conflicts"];
   return warningFields.some((key) => Array.isArray(report[key]) && report[key].length > 0) ? "WARN" : "PASS";
 }
@@ -284,7 +286,7 @@ async function lint(config) {
   const parsed = parseJsonResult(await runCli(config, ["lint", "--json"]));
   if (!parsed.ok) {
     return {
-      content: [{ type: "text", text: failOpenText("lint", parsed) }],
+      content: [{ type: "text", text: `LLM Wiki Lint: UNAVAILABLE (health unknown). ${failOpenText("lint", parsed)}` }],
       details: { error: "lint_unavailable", message: parsed.error }
     };
   }
